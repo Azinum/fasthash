@@ -60,6 +60,8 @@ typedef enum {
   V_FLOAT64
 } Vector_type;
 
+void benchmarks_run();
+void collisions_run();
 f32 benchmark(hash_func func, const u8* data, const size_t size, const size_t n);
 size_t calculate_collisions(hash_func func, const u8* data, const size_t size, const size_t n, size_t* collision_map, size_t collision_map_size);
 void vector_print(Vector_type type, void* v);
@@ -78,59 +80,12 @@ size_t buffer[BUFFER_SIZE] = {
 };
 
 i32 main(void) {
-  printf("results:\n");
-  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
-    hash_func func = hash_funcs[i];
-    Hash hash = func((u8*)buffer, sizeof(buffer));
-    printf("%s: %zu\n", hash_funcs_str_fmt[i], hash);
-  }
-
+  ASSERT(hash_funcs[HASH_BASIC]((u8*)buffer, sizeof(buffer)) == hash_funcs[HASH_BASIC_SIMD]((u8*)buffer, sizeof(buffer)));
+  ASSERT(hash_funcs[HASH_BASIC_V2]((u8*)buffer, sizeof(buffer)) == hash_funcs[HASH_BASIC_V2_SIMD]((u8*)buffer, sizeof(buffer)));
 #if BENCHMARK
-  #define NS_PER_BENCHMARK 4
-  const size_t ns[NS_PER_BENCHMARK] = {
-    1000, 10000, 100000, 1000000
-  };
-  f32 bench_result[MAX_HASH_TYPE * NS_PER_BENCHMARK] = {0};
-  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
-    for (size_t n = 0; n < NS_PER_BENCHMARK; ++n) {
-      const size_t N = ns[n];
-      bench_result[i * NS_PER_BENCHMARK + n] = benchmark(hash_funcs[i], (u8*)buffer, sizeof(buffer), N);
-    }
-  }
-
-  // hashrate * bytes hashed per hash
-  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
-    const char* hash_name = hash_funcs_str[i];
-    printf("%s:\n", hash_name);
-    for (size_t n = 0; n < NS_PER_BENCHMARK; ++n) {
-      const size_t N = ns[n];
-      f32 dt = bench_result[i * NS_PER_BENCHMARK + n];
-      f32 dt_per_hash = dt / N;
-      size_t hashrate = (size_t)(1.0f / dt_per_hash);
-      f32 mib_speed = hashrate * sizeof(buffer) / (f32)(1024 * 1024 * 1024);
-      printf("   %.7f ms (N = %zu, %zu H/s, %g MH/s, %.3g GiB/s)\n", dt * 1000.0f, N, hashrate, hashrate / 1000000.0f, mib_speed);
-    }
-  }
+  benchmarks_run();
 #endif
-
-  srand(time(0));
-  #define DATA_COUNT 1024
-  size_t data_size = sizeof(size_t) * DATA_COUNT;
-  size_t* data = malloc(data_size);
-  for (size_t i = 0; i < DATA_COUNT; ++i) {
-    data[i] = rand();
-  }
-
-  #define COLLISION_MAP_SIZE 4421
-  #define HASH_INSERTIONS COLLISION_MAP_SIZE/4
-  size_t collision_map[COLLISION_MAP_SIZE] = {0};
-  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
-    const char* hash_name = hash_funcs_str[i];
-    memset(collision_map, 0, sizeof(collision_map));
-    size_t collisions = calculate_collisions(hash_funcs[i], (u8*)data, data_size, HASH_INSERTIONS, collision_map, COLLISION_MAP_SIZE);
-    printf("%s:\n", hash_name);
-    printf("   collisions: %zu (%.3g%%, insertions: %d, map size: %d)\n", collisions, 100 * (collisions / (f32)COLLISION_MAP_SIZE), HASH_INSERTIONS, COLLISION_MAP_SIZE);
-  }
+  collisions_run();
   return 0;
 }
 
@@ -236,6 +191,58 @@ inline Hash basic_v2_simd(const u8* data, const size_t size) {
 #else
   return basic_v2(data, size);
 #endif
+}
+
+void benchmarks_run() {
+  FILE* fp = stdout;
+
+  #define NS_PER_BENCHMARK 4
+  const size_t ns[NS_PER_BENCHMARK] = {
+    1000, 10000, 100000, 1000000
+  };
+  f32 bench_result[MAX_HASH_TYPE * NS_PER_BENCHMARK] = {0};
+  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
+    for (size_t n = 0; n < NS_PER_BENCHMARK; ++n) {
+      const size_t N = ns[n];
+      bench_result[i * NS_PER_BENCHMARK + n] = benchmark(hash_funcs[i], (u8*)buffer, sizeof(buffer), N);
+    }
+  }
+
+  // hashrate * bytes hashed per hash
+  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
+    const char* hash_name = hash_funcs_str[i];
+    fprintf(fp, "%s:\n", hash_name);
+    for (size_t n = 0; n < NS_PER_BENCHMARK; ++n) {
+      const size_t N = ns[n];
+      f32 dt = bench_result[i * NS_PER_BENCHMARK + n];
+      f32 dt_per_hash = dt / N;
+      size_t hashrate = (size_t)(1.0f / dt_per_hash);
+      f32 mib_speed = hashrate * sizeof(buffer) / (f32)(1024 * 1024 * 1024);
+      fprintf(fp, "   %.7f ms (N = %zu, %zu H/s, %g MH/s, %.3g GiB/s)\n", dt * 1000.0f, N, hashrate, hashrate / 1000000.0f, mib_speed);
+    }
+  }
+}
+
+void collisions_run() {
+  srand(time(0));
+  #define DATA_COUNT 1024
+  size_t data_size = sizeof(size_t) * DATA_COUNT;
+  size_t* data = malloc(data_size);
+  for (size_t i = 0; i < DATA_COUNT; ++i) {
+    data[i] = rand();
+  }
+
+  #define COLLISION_MAP_SIZE 4421
+  #define HASH_INSERTIONS COLLISION_MAP_SIZE/4
+  size_t collision_map[COLLISION_MAP_SIZE] = {0};
+  for (size_t i = 0; i < MAX_HASH_TYPE; ++i) {
+    const char* hash_name = hash_funcs_str[i];
+    memset(collision_map, 0, sizeof(collision_map));
+    size_t collisions = calculate_collisions(hash_funcs[i], (u8*)data, data_size, HASH_INSERTIONS, collision_map, COLLISION_MAP_SIZE);
+    printf("%s:\n", hash_name);
+    printf("   collisions: %zu (%.3g%%, insertions: %d, map size: %d)\n", collisions, 100 * (collisions / (f32)COLLISION_MAP_SIZE), HASH_INSERTIONS, COLLISION_MAP_SIZE);
+  }
+  free(data);
 }
 
 f32 benchmark(hash_func func, const u8* data, const size_t size, const size_t n) {
