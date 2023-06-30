@@ -6,12 +6,12 @@
 
 typedef size_t Hash;
 
-Hash djb2(const u8* data, const size_t size);
-Hash sdbm(const u8* data, const size_t size);
-Hash basic(const u8* data, const size_t size);
-Hash basic_simd(const u8* data, const size_t size);
-Hash basic_v2(const u8* data, const size_t size);
-Hash basic_v2_simd(const u8* data, const size_t size);
+static Hash djb2(const u8* data, const size_t size);
+static Hash sdbm(const u8* data, const size_t size);
+static Hash basic(const u8* data, const size_t size);
+static Hash basic_simd(const u8* data, const size_t size);
+static Hash basic_v2(const u8* data, const size_t size);
+static Hash basic_v2_simd(const u8* data, const size_t size);
 
 typedef enum {
   HASH_DJB2 = 0,
@@ -72,11 +72,11 @@ size_t buffer[BUFFER_SIZE] = {
 };
 
 i32 main(void) {
-#if 0
+#ifdef INFO
+  printf("%s\n", INFO);
+#endif
   ASSERT(hash_funcs[HASH_BASIC]((u8*)buffer, sizeof(buffer)) == hash_funcs[HASH_BASIC_SIMD]((u8*)buffer, sizeof(buffer)));
   ASSERT(hash_funcs[HASH_BASIC_V2]((u8*)buffer, sizeof(buffer)) == hash_funcs[HASH_BASIC_V2_SIMD]((u8*)buffer, sizeof(buffer)));
-  ASSERT(hash_funcs[HASH_MURMUR3]((u8*)buffer, sizeof(buffer)) == hash_funcs[HASH_MURMUR3_SIMD]((u8*)buffer, sizeof(buffer)));
-#endif
   results_run();
 #if BENCHMARK
   benchmarks_run();
